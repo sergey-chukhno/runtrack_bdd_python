@@ -204,6 +204,7 @@ if __name__ == "__main__":
   #zoo.show_animals()
   #zoo.delete_animal(id=9)
   #zoo.show_animals()
+  #zoo.calculate_total_surface()
   
     
 
