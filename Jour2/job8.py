@@ -188,6 +188,10 @@ class Zoo:
     
     except mysql.connector.Error as error:
       print(f"Erreur lors du calcul de la superficie totale des cages: {error}")
+  
+  def close(self): 
+    self.cursor.close()
+    self.conn.close()
 
 if __name__ == "__main__": 
   zoo = Zoo(
@@ -205,6 +209,7 @@ if __name__ == "__main__":
   #zoo.delete_animal(id=9)
   #zoo.show_animals()
   #zoo.calculate_total_surface()
+  #zoo.close()
   
     
 
