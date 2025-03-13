@@ -152,7 +152,12 @@ class StockManager:
         
     def create_header(self):
         # Header frame
-        header_frame = ctk.CTkFrame(self.main_container, fg_color=self.colors['primary'], height=100)
+        header_frame = ctk.CTkFrame(
+            self.main_container, 
+            fg_color=self.colors['primary'], 
+            height=100,
+            corner_radius=10
+        )
         header_frame.pack(fill="x", pady=(0, 20))
         header_frame.pack_propagate(False)
         
@@ -165,7 +170,7 @@ class StockManager:
         )
         title_label.pack(side="left", padx=20, pady=20)
         
-        # Summary statistics
+        # Summary statistics in card-like frames
         stats_frame = ctk.CTkFrame(header_frame, fg_color=self.colors['primary'])
         stats_frame.pack(side="right", padx=20, pady=20)
         
@@ -178,21 +183,38 @@ class StockManager:
         cursor.execute("SELECT SUM(price * quantity) FROM product")
         total_value = cursor.fetchone()[0] or 0
         
-        # Stat labels
-        self.create_stat_label(stats_frame, "Total Products", str(total_products))
-        self.create_stat_label(stats_frame, "Total Stock Value", f"${total_value:,}")
+        # Stat cards
+        self.create_stat_card(stats_frame, "Total Products", str(total_products), "📦")
+        self.create_stat_card(stats_frame, "Total Stock Value", f"${total_value:,}", "💰")
         
-    def create_stat_label(self, parent, title, value):
-        frame = ctk.CTkFrame(parent, fg_color=self.colors['secondary'])
+    def create_stat_card(self, parent, title, value, icon):
+        frame = ctk.CTkFrame(
+            parent, 
+            fg_color=self.colors['secondary'],
+            corner_radius=8
+        )
         frame.pack(side="left", padx=10)
         
+        # Icon and title in one row
+        title_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        title_frame.pack(fill="x", padx=10, pady=(5, 0))
+        
+        icon_label = ctk.CTkLabel(
+            title_frame,
+            text=icon,
+            font=("Segoe UI Emoji", 14),
+            text_color="white"
+        )
+        icon_label.pack(side="left", padx=(0, 5))
+        
         ctk.CTkLabel(
-            frame,
+            title_frame,
             text=title,
             font=self.fonts['small'],
             text_color="white"
-        ).pack(padx=10, pady=(5, 0))
+        ).pack(side="left")
         
+        # Value
         ctk.CTkLabel(
             frame,
             text=value,
@@ -205,37 +227,37 @@ class StockManager:
         self.left_frame = ctk.CTkFrame(self.content_frame, fg_color="white", corner_radius=10)
         self.left_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
         
-        # Right frame for actions
-        self.right_frame = ctk.CTkFrame(self.content_frame, fg_color="white", corner_radius=10, width=300)
+        self.right_frame = ctk.CTkFrame(self.content_frame, fg_color="white", corner_radius=10, width=320)
         self.right_frame.pack(side="right", fill="y", padx=(10, 0))
         self.right_frame.pack_propagate(False)
         
     def create_product_list(self):
-        title_frame = ctk.CTkFrame(self.left_frame, fg_color="white")
-        title_frame.pack(fill="x", padx=20, pady=(20, 10))
-        
-        ctk.CTkLabel(
-            title_frame,
-            text="Product Inventory",
-            font=self.fonts['subheading'],
-            text_color=self.colors['text']
-        ).pack(side="left")
+        # Create a card for the product inventory
+        product_card, product_content = self.create_card(
+            self.left_frame, 
+            title="Product Inventory",
+            icon="📦"
+        )
+        product_card.pack(fill="both", expand=True, padx=10, pady=10)
         
         # Search frame
-        search_frame = ctk.CTkFrame(self.left_frame, fg_color="white")
-        search_frame.pack(fill="x", padx=20, pady=(0, 10))
+        search_frame = ctk.CTkFrame(product_content, fg_color="transparent")
+        search_frame.pack(fill="x", pady=(0, 10))
         
         self.search_var = tk.StringVar()
         search_entry = ctk.CTkEntry(
             search_frame,
             placeholder_text="Search products...",
             width=300,
-            textvariable=self.search_var
+            textvariable=self.search_var,
+            height=35,
+            border_color=self.colors['primary']
         )
         search_entry.pack(side="left")
         
-        self.tree_frame = ttk.Frame(self.left_frame)
-        self.tree_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        # Tree frame for product list
+        self.tree_frame = ttk.Frame(product_content)
+        self.tree_frame.pack(fill="both", expand=True, pady=(0, 5))
         
         self.tree = ttk.Treeview(
             self.tree_frame,
@@ -269,93 +291,97 @@ class StockManager:
         self.search_var.trace('w', self.filter_products)
         
     def create_action_buttons(self):
-        ctk.CTkLabel(
-            self.right_frame,
-            text="Actions",
-            font=self.fonts['subheading'],
-            text_color=self.colors['text']
-        ).pack(padx=20, pady=(12, 9))
+        # Create a card for the actions section
+        actions_card, actions_content = self.create_card(
+            self.right_frame, 
+            title="Actions",
+            icon="⚙️"
+        )
+        actions_card.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Frame to filter by category
-        filter_frame = ctk.CTkFrame(self.right_frame, fg_color="#e0e7ff", corner_radius=4) 
-        filter_frame.pack(fill="x", padx=15, pady=(5, 5))
+        filter_card, filter_content = self.create_card(
+            actions_content,
+            title="Filter by Category",
+            icon="🏷️",
+            height=90
+        )
+        filter_card.pack(fill="x", pady=(0, 10))  
         
-        # Filter by category title
-        ctk.CTkLabel(
-            filter_frame,
-            text="Filter by Category",
-            font=('Helvetica', 10, 'bold'),
-            text_color=self.colors['primary']
-        ).pack(fill="x", padx=5, pady=(4, 2))
-        
-        # Filter by category dropdown menu
-        dropdown_frame = ctk.CTkFrame(filter_frame, fg_color="white", corner_radius=2)  
-        dropdown_frame.pack(fill="x", padx=5, pady=(0, 4))
-        
-        
+        # Category dropdown with reduced height
         self.category_var = tk.StringVar()
         self.category_combobox = ctk.CTkComboBox(
-            dropdown_frame,
+            filter_content,
             variable=self.category_var,
             values=["All", "Electronics", "Clothing", "Food", "Books"],
-            height=22,  
-            width=150,  
+            height=10,  
+            width=200,
             fg_color="white",
             border_color=self.colors['primary'],
             button_color=self.colors['primary'],
             button_hover_color=self.colors['secondary'],
             dropdown_fg_color="white",
             dropdown_hover_color=self.colors['secondary'],
-            dropdown_text_color=self.colors['text'],
-            font=('Helvetica', 11) 
+            dropdown_text_color=self.colors['text']
         )
-        self.category_combobox.pack(fill="x", padx=4, pady=3) 
-        
+        self.category_combobox.pack(fill="x", pady=(1, 7))  
         self.update_category_combobox()
         
-        # Action buttons (right pannel)
-        button_frame = ctk.CTkFrame(self.right_frame, fg_color="white")
-        button_frame.pack(fill="x", padx=20, pady=(0, 20))  
+        # Action buttons 
+        button_frame = ctk.CTkFrame(actions_content, fg_color="transparent")
+        button_frame.pack(fill="x", pady=(0, 5))
         
+        
+        button_height = 35
+        button_corner_radius = 8
+        button_padding = 3
+        
+        # Add Product button
         add_btn = ctk.CTkButton(
             button_frame,
             text="Add Product",
             command=self.add_product_window,
             fg_color=self.colors['success'],
-            hover_color=self.colors['success'],
-            height=40
+            hover_color="#057857",  
+            height=button_height, 
+            corner_radius=button_corner_radius
         )
-        add_btn.pack(fill="x", pady=5)
+        add_btn.pack(fill="x", pady=button_padding) 
         
+        # Edit Product button
         edit_btn = ctk.CTkButton(
             button_frame,
             text="Edit Product",
             command=self.edit_product_window,
             fg_color=self.colors['primary'],
             hover_color=self.colors['secondary'],
-            height=40
+            height=button_height,  
+            corner_radius=button_corner_radius
         )
-        edit_btn.pack(fill="x", pady=5)
+        edit_btn.pack(fill="x", pady=button_padding)  
         
+        # Delete Product button
         delete_btn = ctk.CTkButton(
             button_frame,
             text="Delete Product",
             command=self.delete_product,
             fg_color=self.colors['danger'],
-            hover_color=self.colors['danger'],
-            height=40
+            hover_color="#b91c1c",  
+            height=button_height,  
+            corner_radius=button_corner_radius
         )
-        delete_btn.pack(fill="x", pady=5)
+        delete_btn.pack(fill="x", pady=button_padding) 
         
+        # Export Data button
         export_btn = ctk.CTkButton(
             button_frame,
             text="Export Data",
             command=self.export_data,
             fg_color=self.colors['warning'],
-            hover_color=self.colors['warning'],
-            height=40
+            hover_color="#b45309",  
+            height=button_height, 
+            corner_radius=button_corner_radius
         )
-        export_btn.pack(fill="x", pady=5)
+        export_btn.pack(fill="x", pady=button_padding)
         
     def create_charts(self):
         # Analytics dashboard section
@@ -412,10 +438,10 @@ class StockManager:
         for widget in self.charts_frame.winfo_children():
             widget.destroy()
         
-        # Set style for charts -ggplot
+        # Set style for charts
         plt.style.use('ggplot')
         
-        # Charts styling - font size, spacing
+        # Charts styling
         plt.rcParams.update({
             'font.size': 8,
             'axes.titlesize': 10,
@@ -434,26 +460,43 @@ class StockManager:
         
         cursor = self.conn.cursor()
         
-        # Chart frames
-        top_left = ctk.CTkFrame(self.charts_frame, fg_color="white")
-        top_left.grid(row=0, column=0, padx=20, pady=(20, 30), sticky="nsew")  
+        # Create chart cards
+        top_left_card, top_left = self.create_card(
+            self.charts_frame, 
+            title="Product Distribution",
+            icon="📊"
+        )
+        top_left_card.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
         
-        top_right = ctk.CTkFrame(self.charts_frame, fg_color="white")
-        top_right.grid(row=0, column=1, padx=20, pady=(20, 30), sticky="nsew")  
+        top_right_card, top_right = self.create_card(
+            self.charts_frame, 
+            title="Stock Value by Category",
+            icon="💰"
+        )
+        top_right_card.grid(row=0, column=1, padx=15, pady=15, sticky="nsew")
         
-        bottom_left = ctk.CTkFrame(self.charts_frame, fg_color="white")
-        bottom_left.grid(row=1, column=0, padx=20, pady=(30, 20), sticky="nsew")  
+        bottom_left_card, bottom_left = self.create_card(
+            self.charts_frame, 
+            title="Price Distribution",
+            icon="📈"
+        )
+        bottom_left_card.grid(row=1, column=0, padx=15, pady=15, sticky="nsew")
         
-        bottom_right = ctk.CTkFrame(self.charts_frame, fg_color="white")
-        bottom_right.grid(row=1, column=1, padx=20, pady=(30, 20), sticky="nsew") 
+        bottom_right_card, bottom_right = self.create_card(
+            self.charts_frame, 
+            title="Top Products by Value",
+            icon="🏆"
+        )
+        bottom_right_card.grid(row=1, column=1, padx=15, pady=15, sticky="nsew")
         
+        # Define colors for charts
         category_colors = ['#3b82f6', '#059669', '#d97706', '#dc2626', '#8b5cf6']
-        bar_colors = ['#0891b2', '#0d9488', '#0284c7', '#4f46e5', '#7c3aed']  
-        hist_colors = ['#0ea5e9', '#06b6d4', '#0284c7', '#2563eb', '#4f46e5']  
-        top_products_colors = ['#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f']  
+        bar_colors = ['#0891b2', '#0d9488', '#0284c7', '#4f46e5', '#7c3aed']
+        hist_colors = ['#0ea5e9', '#06b6d4', '#0284c7', '#2563eb', '#4f46e5']
+        top_products_colors = ['#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f']
         
         # Product Distribution by Category (Pie Chart)
-        fig1, ax1 = plt.subplots(figsize=(7, 4), dpi=100) 
+        fig1, ax1 = plt.subplots(figsize=(7.5, 4), dpi=100)
         cursor.execute("""
             SELECT c.name, COUNT(p.id) 
             FROM category c 
@@ -464,7 +507,7 @@ class StockManager:
         categories = [x[0] for x in cat_data]
         counts = [x[1] for x in cat_data]
         
-        ax1.set_position([0.36, 0.1, 0.5, 0.8])  
+        ax1.set_position([0.36, 0.1, 0.5, 0.8])
         
         wedges, texts, autotexts = ax1.pie(counts, 
                                           labels=categories, 
@@ -474,13 +517,11 @@ class StockManager:
                                           textprops={'fontsize': 8},
                                           pctdistance=0.85,
                                           radius=0.8,  
-                                          labeldistance=1.1) 
+                                          labeldistance=1.1)
         
-        ax1.set_title('Product Distribution', pad=10, fontsize=11, fontweight='bold')
         plt.setp(autotexts, size=8, weight="bold", color="white")
         plt.setp(texts, size=8)
         
-        #plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
         plt.tight_layout(rect=[0, 0, 1, 0.95])
         
         canvas1 = FigureCanvasTkAgg(fig1, master=top_left)
@@ -488,7 +529,7 @@ class StockManager:
         canvas1.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
         
         # Stock Value by Category (Bar Chart)
-        fig2, ax2 = plt.subplots(figsize=(7, 4), dpi=100) 
+        fig2, ax2 = plt.subplots(figsize=(7, 4), dpi=100)
         cursor.execute("""
             SELECT c.name, SUM(p.price * p.quantity) 
             FROM category c 
@@ -500,7 +541,6 @@ class StockManager:
         values = [x[1] if x[1] is not None else 0 for x in value_data]
         
         bars = ax2.bar(categories, values, color=bar_colors[:len(categories)])
-        ax2.set_title('Stock Value by Category', pad=10, fontsize=11, fontweight='bold') 
         ax2.set_xlabel('Category', fontsize=10, labelpad=10)
         ax2.set_ylabel('Value ($)', fontsize=10, labelpad=10)
         plt.setp(ax2.get_xticklabels(), rotation=30, ha='right')
@@ -537,7 +577,6 @@ class StockManager:
         for i, patch in enumerate(patches):
             patch.set_facecolor(hist_colors[i % len(hist_colors)])
         
-        ax3.set_title('Price Distribution', pad=20, fontsize=11, fontweight='bold')
         ax3.set_xlabel('Price ($)', fontsize=10, labelpad=10)
         ax3.set_ylabel('Count', fontsize=10, labelpad=10)
         
@@ -550,7 +589,7 @@ class StockManager:
         canvas3.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
         
         # Top Products by Value (Horizontal Bar Chart)
-        fig4, ax4 = plt.subplots(figsize=(8.5, 5), dpi=100) 
+        fig4, ax4 = plt.subplots(figsize=(8.5, 5), dpi=100)
         cursor.execute("""
             SELECT name, price * quantity as total_value 
             FROM product 
@@ -564,7 +603,6 @@ class StockManager:
         
         bars = ax4.barh(products, values, color=top_products_colors[:len(products)])
         
-        ax4.set_title('Top Products by Value', pad=25, fontsize=11, fontweight='bold')
         ax4.set_xlabel('Value ($)', fontsize=10, labelpad=10)
         
         ax4.xaxis.set_major_formatter(plt.FuncFormatter(format_value))
@@ -572,20 +610,18 @@ class StockManager:
         plt.setp(ax4.get_yticklabels(), fontsize=8)
         ax4.set_ylim(-0.5, len(products) - 0.5)  # Add more space between bars
         
-        #plt.subplots_adjust(left=0.35, top=1)
-        
         for i, bar in enumerate(bars):
             width = bar.get_width()
             ax4.text(width, i, format_value(width, None),
                     ha='left', va='center',
                     fontsize=8, fontweight='bold')
         
-        plt.tight_layout(rect=[0, 0, 1, 0.95]) 
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
         
         canvas4 = FigureCanvasTkAgg(fig4, master=bottom_right)
         canvas4.draw()
         canvas4.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
-        
+
     def filter_products(self, *args):
         search_term = self.search_var.get().lower()
         
@@ -849,6 +885,74 @@ class StockManager:
         
         for product in cursor.fetchall():
             self.tree.insert("", "end", values=product)
+
+    def create_card(self, parent, title=None, icon=None, width=None, height=None):
+        """
+        Creates a standardized card frame with optional title and icon.
+        
+        Args:
+            parent: Parent widget
+            title: Optional card title
+            icon: Optional icon character (emoji)
+            width: Optional fixed width
+            height: Optional fixed height
+            
+        Returns:
+            outer_frame: The card's outer frame
+            content_frame: The inner content frame where widgets should be placed
+        """
+        # Create outer card frame with shadow effect
+        outer_frame = ctk.CTkFrame(
+            parent, 
+            fg_color="white",
+            corner_radius=10,
+            border_width=1,
+            border_color="#E5E7EB"
+        )
+        
+        if width:
+            outer_frame.configure(width=width)
+        if height:
+            outer_frame.configure(height=height)
+            outer_frame.pack_propagate(False)
+        
+        outer_frame.configure(border_width=1, border_color="#CCCCCC")
+        
+        if title:
+            title_frame = ctk.CTkFrame(
+                outer_frame,
+                fg_color="#F9FAFB", 
+                corner_radius=8,
+                height=38  
+            )
+            title_frame.pack(fill="x", padx=10, pady=(10, 5)) 
+            title_frame.pack_propagate(False)
+            
+            title_container = ctk.CTkFrame(title_frame, fg_color="transparent")
+            title_container.pack(side="left", padx=10)
+            
+            if icon:
+                icon_label = ctk.CTkLabel(
+                    title_container,
+                    text=icon,
+                    font=("Segoe UI Emoji", 16), 
+                    text_color=self.colors['primary']
+                )
+                icon_label.pack(side="left", padx=(0, 5))
+            
+            title_label = ctk.CTkLabel(
+                title_container,
+                text=title,
+                font=('Helvetica', 15, 'bold'),  
+                text_color=self.colors['text']
+            )
+            title_label.pack(side="left")
+        
+        
+        content_frame = ctk.CTkFrame(outer_frame, fg_color="transparent")
+        content_frame.pack(fill="both", expand=True, padx=15, pady=(0 if title else 15, 10))  
+        
+        return outer_frame, content_frame
 
     def run(self):
         self.root.mainloop()
