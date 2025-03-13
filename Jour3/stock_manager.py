@@ -90,14 +90,20 @@ class StockManager:
             'warning': '#d97706', 
             'danger': '#dc2626', 
             'background': '#f8fafc', 
-            'text': '#1e293b' 
+            'text': '#1e293b',
+            'kpi_blue': '#3b82f6',
+            'kpi_amber': '#f59e0b',
+            'kpi_green': '#10b981',
+            'kpi_red': '#ef4444'
         }
     
         self.fonts = {
             'heading': ('Helvetica', 24, 'bold'),
             'subheading': ('Helvetica', 18, 'bold'),
             'body': ('Helvetica', 12),
-            'small': ('Helvetica', 10)
+            'small': ('Helvetica', 10),
+            'kpi_value': ('Helvetica', 28, 'bold'),
+            'kpi_title': ('Helvetica', 14)
         }
         
         style = ttk.Style()
@@ -118,26 +124,33 @@ class StockManager:
         style.map("Treeview.Heading",
                  background=[('active', self.colors['secondary'])])
         
+        # Create main scrollable container
+        self.main_scroll = ctk.CTkScrollableFrame(
+            self.root,
+            fg_color=self.colors['background'],
+            corner_radius=0
+        )
+        self.main_scroll.pack(fill="both", expand=True)
         
-        self.main_container = ctk.CTkFrame(self.root, fg_color=self.colors['background'])
+        self.main_container = ctk.CTkFrame(self.main_scroll, fg_color=self.colors['background'])
         self.main_container.pack(fill="both", expand=True, padx=20, pady=20)
         
         self.create_header()
         
+        # Add KPI Dashboard
+        self.create_kpi_dashboard()
+        
         # Upper section frame
         self.upper_section = ctk.CTkFrame(self.main_container, fg_color=self.colors['background'])
-        self.upper_section.pack(fill="both", pady=(0, 10))
+        self.upper_section.pack(fill="both", pady=(20, 10))
         
         # Lower section
         self.lower_section = ctk.CTkFrame(self.main_container, fg_color=self.colors['background'])
         self.lower_section.pack(fill="both", expand=True)
         
-        # Define height of upper and lower sections (350 pixels for each)
-        self.main_container.pack_propagate(False)
-        self.upper_section.configure(height=350)  
-        self.lower_section.configure(height=350)  
-        self.upper_section.pack_propagate(False)
-        self.lower_section.pack_propagate(False)
+        # Define heights but allow them to be flexible
+        self.upper_section.configure(height=350)
+        self.lower_section.configure(height=350)
         
         self.content_frame = ctk.CTkFrame(self.upper_section, fg_color=self.colors['background'])
         self.content_frame.pack(fill="both", expand=True)
@@ -221,6 +234,119 @@ class StockManager:
             font=self.fonts['subheading'],
             text_color="white"
         ).pack(padx=10, pady=(0, 5))
+        
+    def create_kpi_dashboard(self):
+        # Create main frame for KPI dashboard
+        kpi_frame = ctk.CTkFrame(self.main_container, fg_color=self.colors['background'])
+        kpi_frame.pack(fill="x", pady=(0, 20))
+        
+        # Create grid for KPIs (2x2)
+        for i in range(2):
+            kpi_frame.grid_columnconfigure(i, weight=1)
+        
+        # Calculate KPI metrics
+        cursor = self.conn.cursor()
+        
+        # Total Products
+        cursor.execute("SELECT COUNT(*) FROM product")
+        total_products = cursor.fetchone()[0]
+        
+        # Low Stock Items (items with quantity < 10)
+        cursor.execute("SELECT COUNT(*) FROM product WHERE quantity < 10")
+        low_stock = cursor.fetchone()[0]
+        
+        # Total Inventory Value
+        cursor.execute("SELECT SUM(price * quantity) FROM product")
+        total_value = cursor.fetchone()[0] or 0
+        
+        # Category Count
+        cursor.execute("SELECT COUNT(*) FROM category")
+        category_count = cursor.fetchone()[0]
+        
+        # Create KPI cards
+        kpi_configs = [
+            {
+                'title': 'Total Products',
+                'value': str(total_products),
+                'icon': '📦',
+                'color': self.colors['kpi_blue'],
+                'position': (0, 0)
+            },
+            {
+                'title': 'Low Stock Items',
+                'value': str(low_stock),
+                'icon': '⚠️',
+                'color': self.colors['kpi_amber'],
+                'position': (0, 1)
+            },
+            {
+                'title': 'Total Inventory Value',
+                'value': f'${total_value:,}',
+                'icon': '💰',
+                'color': self.colors['kpi_green'],
+                'position': (1, 0)
+            },
+            {
+                'title': 'Categories',
+                'value': str(category_count),
+                'icon': '🏷️',
+                'color': self.colors['kpi_blue'],
+                'position': (1, 1)
+            }
+        ]
+        
+        for kpi in kpi_configs:
+            self.create_kpi_card(
+                kpi_frame,
+                title=kpi['title'],
+                value=kpi['value'],
+                icon=kpi['icon'],
+                color=kpi['color'],
+                row=kpi['position'][0],
+                column=kpi['position'][1]
+            )
+    
+    def create_kpi_card(self, parent, title, value, icon, color, row, column):
+        # Create card frame
+        card = ctk.CTkFrame(
+            parent,
+            fg_color="white",
+            corner_radius=10,
+            border_width=1,
+            border_color="#E5E7EB"
+        )
+        card.grid(row=row, column=column, padx=10, pady=5, sticky="nsew")
+        
+        # Icon
+        icon_label = ctk.CTkLabel(
+            card,
+            text=icon,
+            font=("Segoe UI Emoji", 24),
+            text_color=color
+        )
+        icon_label.pack(pady=(15, 5))
+        
+        # Value
+        value_label = ctk.CTkLabel(
+            card,
+            text=value,
+            font=self.fonts['kpi_value'],
+            text_color=color
+        )
+        value_label.pack(pady=(0, 5))
+        
+        # Title
+        title_label = ctk.CTkLabel(
+            card,
+            text=title,
+            font=self.fonts['kpi_title'],
+            text_color=self.colors['text']
+        )
+        title_label.pack(pady=(0, 15))
+        
+        # Make cards expand equally
+        card.grid_propagate(False)
+        card.configure(width=300, height=150)  # Fixed size for consistency
         
     def create_frames(self):
         # Frame for product lists
@@ -370,6 +496,30 @@ class StockManager:
             corner_radius=button_corner_radius
         )
         delete_btn.pack(fill="x", pady=button_padding) 
+
+        # Add Category button
+        add_category_btn = ctk.CTkButton(
+            button_frame,
+            text="Add Category",
+            command=self.add_category_window,
+            fg_color=self.colors['success'],
+            hover_color="#057857",  
+            height=button_height,
+            corner_radius=button_corner_radius
+        )
+        add_category_btn.pack(fill="x", pady=button_padding)
+
+        # Delete Category button
+        delete_category_btn = ctk.CTkButton(
+            button_frame,
+            text="Delete Category",
+            command=self.delete_category,
+            fg_color=self.colors['danger'],
+            hover_color="#b91c1c",  
+            height=button_height,
+            corner_radius=button_corner_radius
+        )
+        delete_category_btn.pack(fill="x", pady=button_padding)
         
         # Export Data button
         export_btn = ctk.CTkButton(
@@ -824,6 +974,148 @@ class StockManager:
             except Exception as e:
                 messagebox.showerror("Error", f"Error deleting product: {str(e)}")
                 
+    def add_category_window(self):
+        window = ctk.CTkToplevel(self.root)
+        window.title("Add Category")
+        window.geometry("400x250")
+        window.configure(fg_color="white")
+        
+        ctk.CTkLabel(
+            window,
+            text="Add New Category",
+            font=self.fonts['heading'],
+            text_color=self.colors['text']
+        ).pack(pady=(20, 30))
+        
+        name_var = tk.StringVar()
+        
+        form_frame = ctk.CTkFrame(window, fg_color="white")
+        form_frame.pack(fill="x", padx=40)
+        
+        ctk.CTkLabel(
+            form_frame,
+            text="Category Name:",
+            font=self.fonts['body']
+        ).pack(fill="x", pady=(10, 0))
+        
+        ctk.CTkEntry(
+            form_frame,
+            textvariable=name_var,
+            height=35
+        ).pack(fill="x", pady=(5, 15))
+        
+        def save_category():
+            try:
+                if not name_var.get().strip():
+                    messagebox.showwarning("Warning", "Please enter a category name")
+                    return
+                
+                cursor = self.conn.cursor()
+                
+                # Check if category already exists
+                cursor.execute("SELECT COUNT(*) FROM category WHERE name = %s", (name_var.get(),))
+                if cursor.fetchone()[0] > 0:
+                    messagebox.showwarning("Warning", "Category already exists")
+                    return
+                
+                cursor.execute("INSERT INTO category (name) VALUES (%s)", (name_var.get(),))
+                self.conn.commit()
+                
+                self.update_category_combobox()
+                self.update_charts()
+                window.destroy()
+                messagebox.showinfo("Success", "Category added successfully!")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Error adding category: {str(e)}")
+        
+        ctk.CTkButton(
+            window,
+            text="Save Category",
+            command=save_category,
+            fg_color=self.colors['success'],
+            hover_color=self.colors['success'],
+            height=40
+        ).pack(pady=30)
+
+    def delete_category(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT name FROM category")
+        categories = [x[0] for x in cursor.fetchall()]
+        
+        if not categories:
+            messagebox.showwarning("Warning", "No categories available to delete")
+            return
+        
+        window = ctk.CTkToplevel(self.root)
+        window.title("Delete Category")
+        window.geometry("400x300")
+        window.configure(fg_color="white")
+        
+        ctk.CTkLabel(
+            window,
+            text="Delete Category",
+            font=self.fonts['heading'],
+            text_color=self.colors['text']
+        ).pack(pady=(20, 30))
+        
+        category_var = tk.StringVar()
+        
+        form_frame = ctk.CTkFrame(window, fg_color="white")
+        form_frame.pack(fill="x", padx=40)
+        
+        ctk.CTkLabel(
+            form_frame,
+            text="Select Category to Delete:",
+            font=self.fonts['body']
+        ).pack(fill="x", pady=(10, 0))
+        
+        category_combo = ctk.CTkComboBox(
+            form_frame,
+            variable=category_var,
+            values=categories,
+            height=35
+        )
+        category_combo.pack(fill="x", pady=(5, 15))
+        
+        def confirm_delete():
+            if not category_var.get():
+                messagebox.showwarning("Warning", "Please select a category")
+                return
+                
+            if messagebox.askyesno("Confirm", f"Are you sure you want to delete the category '{category_var.get()}'?\n\nThis will also delete all products in this category!"):
+                try:
+                    cursor = self.conn.cursor()
+                    
+                    # Delete all products in the category first
+                    cursor.execute("""
+                        DELETE p FROM product p 
+                        JOIN category c ON p.id_category = c.id 
+                        WHERE c.name = %s
+                    """, (category_var.get(),))
+                    
+                    # Then delete the category
+                    cursor.execute("DELETE FROM category WHERE name = %s", (category_var.get(),))
+                    self.conn.commit()
+                    
+                    self.update_category_combobox()
+                    self.load_products()
+                    self.update_charts()
+                    window.destroy()
+                    messagebox.showinfo("Success", "Category deleted successfully!")
+                    
+                except Exception as e:
+                    messagebox.showerror("Error", f"Error deleting category: {str(e)}")
+        
+        ctk.CTkButton(
+            window,
+            text="Delete Category",
+            command=confirm_delete,
+            fg_color=self.colors['danger'],
+            hover_color="#b91c1c",
+            height=40
+        ).pack(pady=30)
+
     def export_data(self):
         try:
             category = self.category_var.get()
