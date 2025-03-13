@@ -366,9 +366,13 @@ class StockManager:
         )
         product_card.pack(fill="both", expand=True, padx=10, pady=10)
         
+        # Search and pagination frame
+        top_frame = ctk.CTkFrame(product_content, fg_color="transparent")
+        top_frame.pack(fill="x", pady=(0, 10))
+        
         # Search frame
-        search_frame = ctk.CTkFrame(product_content, fg_color="transparent")
-        search_frame.pack(fill="x", pady=(0, 10))
+        search_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
+        search_frame.pack(side="left", fill="x", expand=True)
         
         self.search_var = tk.StringVar()
         search_entry = ctk.CTkEntry(
@@ -381,9 +385,76 @@ class StockManager:
         )
         search_entry.pack(side="left")
         
+        # Pagination frame
+        pagination_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
+        pagination_frame.pack(side="right")
+        
+        self.page_size_var = tk.StringVar(value="10")
+        page_size_label = ctk.CTkLabel(
+            pagination_frame,
+            text="Items per page:",
+            font=self.fonts['small']
+        )
+        page_size_label.pack(side="left", padx=(0, 5))
+        
+        page_size_combo = ctk.CTkComboBox(
+            pagination_frame,
+            values=["10", "25", "50", "100"],
+            variable=self.page_size_var,
+            width=70,
+            height=35,
+            command=self.load_products
+        )
+        page_size_combo.pack(side="left", padx=5)
+        
+        self.current_page = 1
+        self.total_pages = 1
+        
+        self.page_label = ctk.CTkLabel(
+            pagination_frame,
+            text="Page 1 of 1",
+            font=self.fonts['small']
+        )
+        self.page_label.pack(side="left", padx=10)
+        
+        prev_page_btn = ctk.CTkButton(
+            pagination_frame,
+            text="←",
+            width=35,
+            height=35,
+            command=self.prev_page,
+            fg_color=self.colors['primary']
+        )
+        prev_page_btn.pack(side="left", padx=2)
+        
+        next_page_btn = ctk.CTkButton(
+            pagination_frame,
+            text="→",
+            width=35,
+            height=35,
+            command=self.next_page,
+            fg_color=self.colors['primary']
+        )
+        next_page_btn.pack(side="left", padx=2)
+        
         # Tree frame for product list
         self.tree_frame = ttk.Frame(product_content)
         self.tree_frame.pack(fill="both", expand=True, pady=(0, 5))
+        
+        # Configure Treeview style for alternating rows and hover effect
+        style = ttk.Style()
+        style.configure("Treeview",
+                       background="#ffffff",
+                       foreground=self.colors['text'],
+                       rowheight=35,
+                       fieldbackground="#ffffff",
+                       bordercolor=self.colors['primary'],
+                       borderwidth=0)
+        
+        # Configure alternating row colors
+        style.map("Treeview",
+                 background=[("selected", self.colors['primary'])],
+                 foreground=[("selected", "white")])
         
         self.tree = ttk.Treeview(
             self.tree_frame,
@@ -392,7 +463,7 @@ class StockManager:
             style="Treeview"
         )
         
-        # Column headings
+        # Column headings with sorting
         columns = [
             ("ID", 80),
             ("Name", 200),
@@ -402,8 +473,12 @@ class StockManager:
             ("Category", 150)
         ]
         
+        self.sort_column = "ID"  # Default sort column
+        self.sort_reverse = False  # Default sort direction
+        
         for col, width in columns:
-            self.tree.heading(col, text=col, anchor="w")
+            self.tree.heading(col, text=col, anchor="w",
+                            command=lambda c=col: self.sort_treeview(c))
             self.tree.column(col, width=width, anchor="w")
         
         # Add scrollbar
@@ -413,9 +488,247 @@ class StockManager:
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
+        # Bind events
+        self.tree.bind("<Motion>", self.on_hover)  # Hover effect
+        self.tree.bind("<Button-3>", self.show_context_menu)  # Right-click menu
+        self.tree.bind("<Double-1>", self.on_double_click)  # Double-click to edit
+        
+        # Create context menu
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="Edit", command=self.edit_product_window)
+        self.context_menu.add_command(label="Delete", command=self.delete_product)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="View Details", command=self.view_product_details)
+        
         # Search functionality
         self.search_var.trace('w', self.filter_products)
         
+        # Initial load with alternating colors
+        self.load_products()
+
+    def sort_treeview(self, col):
+        """Sort tree contents when a column header is clicked"""
+        if self.sort_column == col:
+            self.sort_reverse = not self.sort_reverse
+        else:
+            self.sort_column = col
+            self.sort_reverse = False
+        
+        self.load_products()
+    
+    def on_hover(self, event):
+        """Handle hover effect on tree items"""
+        item = self.tree.identify_row(event.y)
+        if item:
+            self.tree.set_tag_configure("hover", background="#f3f4f6")
+            for prev_item in self.tree.tag_has("hover"):
+                self.tree.item(prev_item, tags=[])
+            self.tree.item(item, tags=["hover"])
+    
+    def show_context_menu(self, event):
+        """Show context menu on right-click"""
+        item = self.tree.identify_row(event.y)
+        if item:
+            self.tree.selection_set(item)
+            self.context_menu.post(event.x_root, event.y_root)
+    
+    def on_double_click(self, event):
+        """Handle double-click on tree item"""
+        item = self.tree.identify_row(event.y)
+        column = self.tree.identify_column(event.x)
+        if item and column:
+            self.start_inline_edit(item, column)
+    
+    def start_inline_edit(self, item, column):
+        """Start inline editing for a cell"""
+        if column in ("#1", "#6"):  # Don't allow editing ID or Category
+            return
+        
+        # Get column name and current value
+        col_name = self.tree.heading(column)["text"]
+        current_value = self.tree.item(item)["values"][int(column[1]) - 1]
+        
+        # Create editing window
+        edit_window = ctk.CTkToplevel(self.root)
+        edit_window.geometry("300x150")
+        edit_window.title(f"Edit {col_name}")
+        
+        value_var = tk.StringVar(value=str(current_value))
+        
+        ctk.CTkLabel(
+            edit_window,
+            text=f"Edit {col_name}:",
+            font=self.fonts['body']
+        ).pack(pady=(20, 5))
+        
+        entry = ctk.CTkEntry(
+            edit_window,
+            textvariable=value_var,
+            width=200
+        )
+        entry.pack(pady=5)
+        
+        def save_changes():
+            try:
+                # Get all values
+                values = list(self.tree.item(item)["values"])
+                col_index = int(column[1]) - 1
+                
+                # Validate input based on column type
+                if col_name in ("Price", "Quantity"):
+                    new_value = int(value_var.get())
+                else:
+                    new_value = value_var.get()
+                
+                values[col_index] = new_value
+                
+                # Update database
+                cursor = self.conn.cursor()
+                if col_name == "Name":
+                    cursor.execute("UPDATE product SET name = %s WHERE id = %s",
+                                 (new_value, values[0]))
+                elif col_name == "Description":
+                    cursor.execute("UPDATE product SET description = %s WHERE id = %s",
+                                 (new_value, values[0]))
+                elif col_name == "Price":
+                    cursor.execute("UPDATE product SET price = %s WHERE id = %s",
+                                 (new_value, values[0]))
+                elif col_name == "Quantity":
+                    cursor.execute("UPDATE product SET quantity = %s WHERE id = %s",
+                                 (new_value, values[0]))
+                
+                self.conn.commit()
+                
+                # Update tree
+                self.tree.item(item, values=values)
+                edit_window.destroy()
+                self.update_charts()
+                
+            except ValueError:
+                messagebox.showerror("Error", "Invalid value for numeric field")
+            except Exception as e:
+                messagebox.showerror("Error", f"Error updating value: {str(e)}")
+        
+        ctk.CTkButton(
+            edit_window,
+            text="Save",
+            command=save_changes,
+            fg_color=self.colors['success']
+        ).pack(pady=20)
+    
+    def view_product_details(self):
+        """Show detailed view of selected product"""
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showwarning("Warning", "Please select a product to view")
+            return
+        
+        values = self.tree.item(selected[0])["values"]
+        
+        details_window = ctk.CTkToplevel(self.root)
+        details_window.geometry("500x400")
+        details_window.title("Product Details")
+        
+        # Create a scrollable frame for details
+        details_frame = ctk.CTkScrollableFrame(details_window)
+        details_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Product details
+        fields = [
+            ("ID", values[0]),
+            ("Name", values[1]),
+            ("Description", values[2]),
+            ("Price", f"${values[3]:,}"),
+            ("Quantity", values[4]),
+            ("Category", values[5])
+        ]
+        
+        for label, value in fields:
+            field_frame = ctk.CTkFrame(details_frame, fg_color="transparent")
+            field_frame.pack(fill="x", pady=5)
+            
+            ctk.CTkLabel(
+                field_frame,
+                text=f"{label}:",
+                font=("Helvetica", 12, "bold"),
+                width=100,
+                anchor="w"
+            ).pack(side="left")
+            
+            ctk.CTkLabel(
+                field_frame,
+                text=str(value),
+                font=("Helvetica", 12),
+                anchor="w"
+            ).pack(side="left", padx=10)
+    
+    def next_page(self):
+        """Go to next page"""
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+            self.load_products()
+    
+    def prev_page(self):
+        """Go to previous page"""
+        if self.current_page > 1:
+            self.current_page -= 1
+            self.load_products()
+    
+    def load_products(self, *args):
+        """Load products with sorting and pagination"""
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        cursor = self.conn.cursor()
+        
+        # Get total count for pagination
+        cursor.execute("SELECT COUNT(*) FROM product")
+        total_items = cursor.fetchone()[0]
+        
+        # Calculate pagination
+        page_size = int(self.page_size_var.get())
+        self.total_pages = max(1, (total_items + page_size - 1) // page_size)
+        self.current_page = min(self.current_page, self.total_pages)
+        
+        # Update page label
+        self.page_label.configure(text=f"Page {self.current_page} of {self.total_pages}")
+        
+        # Map column names to their SQL counterparts
+        column_map = {
+            "ID": "p.id",
+            "Name": "p.name",
+            "Description": "p.description",
+            "Price": "p.price",
+            "Quantity": "p.quantity",
+            "Category": "c.name"
+        }
+        
+        # Prepare ORDER BY clause using the mapped column name
+        order_by = f"ORDER BY {column_map[self.sort_column]}"
+        if self.sort_reverse:
+            order_by += " DESC"
+        
+        # Calculate offset
+        offset = (self.current_page - 1) * page_size
+        
+        cursor.execute(f"""
+            SELECT p.id, p.name, p.description, p.price, p.quantity, c.name 
+            FROM product p 
+            JOIN category c ON p.id_category = c.id
+            {order_by}
+            LIMIT %s OFFSET %s
+        """, (page_size, offset))
+        
+        # Insert with alternating colors
+        for i, product in enumerate(cursor.fetchall()):
+            tags = ('evenrow',) if i % 2 == 0 else ('oddrow',)
+            self.tree.insert("", "end", values=product, tags=tags)
+        
+        # Configure row colors
+        self.tree.tag_configure('evenrow', background='#ffffff')
+        self.tree.tag_configure('oddrow', background='#f3f4f6')
+        self.tree.tag_configure('hover', background='#e5e7eb')
+
     def create_action_buttons(self):
         # Create a card for the actions section
         actions_card, actions_content = self.create_card(
@@ -1163,20 +1476,6 @@ class StockManager:
         categories = ["All"] + [x[0] for x in cursor.fetchall()]
         self.category_combobox.configure(values=categories)
         self.category_combobox.set("All")
-
-    def load_products(self):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-            
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT p.id, p.name, p.description, p.price, p.quantity, c.name 
-            FROM product p 
-            JOIN category c ON p.id_category = c.id
-        """)
-        
-        for product in cursor.fetchall():
-            self.tree.insert("", "end", values=product)
 
     def create_card(self, parent, title=None, icon=None, width=None, height=None):
         """
