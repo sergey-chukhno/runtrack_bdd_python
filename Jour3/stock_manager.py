@@ -855,56 +855,71 @@ class StockManager:
         ctk.CTkLabel(
             analytics_header,
             text="Analytics Dashboard",
-            font=self.fonts['subheading'],
+            font=self.fonts['heading'],
             text_color="white"
         ).pack(side="left", padx=20, pady=5)
         
-        # Canvas scrollbar
-        canvas = tk.Canvas(self.lower_section, bg=self.colors['background'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.lower_section, orient="vertical", command=canvas.yview)
+        # Save tab selection when changed
+        def save_tab_state(tab_name):
+            try:
+                with open('tab_state.txt', 'w') as f:
+                    f.write(tab_name)
+            except Exception as e:
+                print(f"Error saving tab state: {e}")
         
-        self.charts_frame = ctk.CTkFrame(canvas, fg_color="white", corner_radius=10)
+        # Create tabview for analytics
+        self.tab_view = ctk.CTkTabview(
+            self.lower_section,
+            fg_color="white",
+            segmented_button_fg_color=self.colors['primary'],
+            segmented_button_selected_color=self.colors['secondary'],
+            segmented_button_selected_hover_color=self.colors['accent'],
+            segmented_button_unselected_color=self.colors['primary'],
+            segmented_button_unselected_hover_color=self.colors['secondary'],
+            text_color="white",
+            corner_radius=10,
+            command=save_tab_state
+        )
+        self.tab_view.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         
-        canvas.configure(yscrollcommand=scrollbar.set)
+        # Create tabs
+        overview_tab = self.tab_view.add("Overview")
+        products_tab = self.tab_view.add("Products")
+        categories_tab = self.tab_view.add("Categories")
+        trends_tab = self.tab_view.add("Trends")
         
-        scrollbar.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True, padx=10, pady=(0, 10))
+        # Configure grid layout for each tab
+        for tab in [overview_tab, products_tab, categories_tab, trends_tab]:
+            tab.grid_columnconfigure(0, weight=1)
+            tab.grid_columnconfigure(1, weight=1)
         
-        canvas_frame = canvas.create_window((0, 0), window=self.charts_frame, anchor="nw")
+        # Store the charts frame for each tab
+        self.charts_frames = {
+            'overview': overview_tab,
+            'products': products_tab,
+            'categories': categories_tab,
+            'trends': trends_tab
+        }
         
-        # Grid layout for charts
-        self.charts_frame.grid_columnconfigure(0, weight=1)
-        self.charts_frame.grid_columnconfigure(1, weight=1)
-        self.charts_frame.grid_columnconfigure(2, weight=1)  
+        # Try to restore last selected tab
+        try:
+            with open('tab_state.txt', 'r') as f:
+                last_tab = f.read().strip()
+                if last_tab in ["Overview", "Products", "Categories", "Trends"]:
+                    self.tab_view.set(last_tab)
+        except:
+            self.tab_view.set("Overview")
         
-        # Bind the frame size to the canvas size
-        def configure_scroll_region(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            canvas.itemconfig(canvas_frame, width=canvas.winfo_width())
-        
-        def configure_canvas(event):
-            # Update the window size when the canvas changes
-            canvas.itemconfig(canvas_frame, width=canvas.winfo_width())
-        
-        # Bind events
-        self.charts_frame.bind("<Configure>", configure_scroll_region)
-        canvas.bind("<Configure>", configure_canvas)
-        
-        # Enable scrolling
-        def on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
-        canvas.bind_all("<MouseWheel>", on_mousewheel)
         self.update_charts()
-        
+
     def update_charts(self):
-        for widget in self.charts_frame.winfo_children():
-            widget.destroy()
+        # Clear existing charts from all tabs
+        for frame in self.charts_frames.values():
+            for widget in frame.winfo_children():
+                widget.destroy()
         
         # Set style for charts
         plt.style.use('ggplot')
-        
-        # Charts styling
         plt.rcParams.update({
             'font.size': 8,
             'axes.titlesize': 10,
@@ -916,50 +931,115 @@ class StockManager:
             'figure.subplot.left': 0.15,
             'figure.subplot.right': 0.95,
             'figure.subplot.top': 0.9,
-            'figure.subplot.bottom': 0.2, 
+            'figure.subplot.bottom': 0.2,
             'figure.subplot.wspace': 0.3,
             'figure.subplot.hspace': 0.6
         })
         
         cursor = self.conn.cursor()
         
-        # Create chart cards
-        top_left_card, top_left = self.create_card(
-            self.charts_frame, 
-            title="Product Distribution",
-            icon="📊"
-        )
-        top_left_card.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
-        
-        top_right_card, top_right = self.create_card(
-            self.charts_frame, 
-            title="Stock Value by Category",
-            icon="💰"
-        )
-        top_right_card.grid(row=0, column=1, padx=15, pady=15, sticky="nsew")
-        
-        bottom_left_card, bottom_left = self.create_card(
-            self.charts_frame, 
-            title="Price Distribution",
-            icon="📈"
-        )
-        bottom_left_card.grid(row=1, column=0, padx=15, pady=15, sticky="nsew")
-        
-        bottom_right_card, bottom_right = self.create_card(
-            self.charts_frame, 
-            title="Top Products by Value",
-            icon="🏆"
-        )
-        bottom_right_card.grid(row=1, column=1, padx=15, pady=15, sticky="nsew")
-        
-        # Define colors for charts
+        # Define colors
         category_colors = ['#3b82f6', '#059669', '#d97706', '#dc2626', '#8b5cf6']
         bar_colors = ['#0891b2', '#0d9488', '#0284c7', '#4f46e5', '#7c3aed']
         hist_colors = ['#0ea5e9', '#06b6d4', '#0284c7', '#2563eb', '#4f46e5']
         top_products_colors = ['#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f']
         
-        # Product Distribution by Category (Pie Chart)
-        fig1, ax1 = plt.subplots(figsize=(7.5, 4), dpi=100)
+        # OVERVIEW TAB
+        # Product Distribution
+        overview_left_card, overview_left = self.create_card(
+            self.charts_frames['overview'],
+            title="Product Distribution",
+            icon="📊"
+        )
+        overview_left_card.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
+        
+        # Stock Value by Category
+        overview_right_card, overview_right = self.create_card(
+            self.charts_frames['overview'],
+            title="Stock Value by Category",
+            icon="💰"
+        )
+        overview_right_card.grid(row=0, column=1, padx=15, pady=15, sticky="nsew")
+        
+        # PRODUCTS TAB
+        # Price Distribution
+        products_left_card, products_left = self.create_card(
+            self.charts_frames['products'],
+            title="Price Distribution",
+            icon="📈"
+        )
+        products_left_card.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
+        
+        # Top Products by Value
+        products_right_card, products_right = self.create_card(
+            self.charts_frames['products'],
+            title="Top Products by Value",
+            icon="🏆"
+        )
+        products_right_card.grid(row=0, column=1, padx=15, pady=15, sticky="nsew")
+        
+        # Product Quantity Distribution
+        products_bottom_card, products_bottom = self.create_card(
+            self.charts_frames['products'],
+            title="Quantity Distribution",
+            icon="📦"
+        )
+        products_bottom_card.grid(row=1, column=0, columnspan=2, padx=15, pady=15, sticky="nsew")
+        
+        # CATEGORIES TAB
+        # Category Distribution
+        categories_left_card, categories_left = self.create_card(
+            self.charts_frames['categories'],
+            title="Products per Category",
+            icon="🏷️"
+        )
+        categories_left_card.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
+        
+        # Average Price by Category
+        categories_right_card, categories_right = self.create_card(
+            self.charts_frames['categories'],
+            title="Average Price by Category",
+            icon="💲"
+        )
+        categories_right_card.grid(row=0, column=1, padx=15, pady=15, sticky="nsew")
+        
+        # TRENDS TAB
+        # Low Stock Items
+        trends_left_card, trends_left = self.create_card(
+            self.charts_frames['trends'],
+            title="Low Stock Items",
+            icon="⚠️"
+        )
+        trends_left_card.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
+        
+        # Value Distribution
+        trends_right_card, trends_right = self.create_card(
+            self.charts_frames['trends'],
+            title="Value Distribution",
+            icon="📊"
+        )
+        trends_right_card.grid(row=0, column=1, padx=15, pady=15, sticky="nsew")
+        
+        # Create charts for Overview tab
+        self.create_product_distribution_chart(overview_left, category_colors)
+        self.create_stock_value_chart(overview_right, bar_colors)
+        
+        # Create charts for Products tab
+        self.create_price_distribution_chart(products_left, hist_colors)
+        self.create_top_products_chart(products_right, top_products_colors)
+        self.create_quantity_distribution_chart(products_bottom, hist_colors)
+        
+        # Create charts for Categories tab
+        self.create_category_distribution_chart(categories_left, category_colors)
+        self.create_avg_price_chart(categories_right, bar_colors)
+        
+        # Create charts for Trends tab
+        self.create_low_stock_chart(trends_left, bar_colors)
+        self.create_value_distribution_chart(trends_right, hist_colors)
+
+    def create_product_distribution_chart(self, parent, colors):
+        fig, ax = plt.subplots(figsize=(7.5, 4), dpi=100)
+        cursor = self.conn.cursor()
         cursor.execute("""
             SELECT c.name, COUNT(p.id) 
             FROM category c 
@@ -970,29 +1050,28 @@ class StockManager:
         categories = [x[0] for x in cat_data]
         counts = [x[1] for x in cat_data]
         
-        ax1.set_position([0.36, 0.1, 0.5, 0.8])
-        
-        wedges, texts, autotexts = ax1.pie(counts, 
-                                          labels=categories, 
-                                          autopct='%1.0f%%', 
-                                          colors=category_colors, 
-                                          wedgeprops={'width': 0.6},
-                                          textprops={'fontsize': 8},
-                                          pctdistance=0.85,
-                                          radius=0.8,  
-                                          labeldistance=1.1)
+        ax.set_position([0.36, 0.1, 0.5, 0.8])
+        wedges, texts, autotexts = ax.pie(
+            counts, 
+            labels=categories, 
+            autopct='%1.0f%%', 
+            colors=colors[:len(categories)], 
+            wedgeprops={'width': 0.6},
+            textprops={'fontsize': 8},
+            pctdistance=0.85,
+            radius=0.8
+        )
         
         plt.setp(autotexts, size=8, weight="bold", color="white")
         plt.setp(texts, size=8)
         
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
-        
-        canvas1 = FigureCanvasTkAgg(fig1, master=top_left)
-        canvas1.draw()
-        canvas1.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
-        
-        # Stock Value by Category (Bar Chart)
-        fig2, ax2 = plt.subplots(figsize=(7, 4), dpi=100)
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+
+    def create_stock_value_chart(self, parent, colors):
+        fig, ax = plt.subplots(figsize=(7, 4), dpi=100)
+        cursor = self.conn.cursor()
         cursor.execute("""
             SELECT c.name, SUM(p.price * p.quantity) 
             FROM category c 
@@ -1003,10 +1082,10 @@ class StockManager:
         categories = [x[0] for x in value_data]
         values = [x[1] if x[1] is not None else 0 for x in value_data]
         
-        bars = ax2.bar(categories, values, color=bar_colors[:len(categories)])
-        ax2.set_xlabel('Category', fontsize=10, labelpad=10)
-        ax2.set_ylabel('Value ($)', fontsize=10, labelpad=10)
-        plt.setp(ax2.get_xticklabels(), rotation=30, ha='right')
+        bars = ax.bar(categories, values, color=colors[:len(categories)])
+        ax.set_xlabel('Category', fontsize=10, labelpad=10)
+        ax.set_ylabel('Value ($)', fontsize=10, labelpad=10)
+        plt.setp(ax.get_xticklabels(), rotation=30, ha='right')
         
         def format_value(x, p):
             if x >= 1e6:
@@ -1015,44 +1094,46 @@ class StockManager:
                 return f'${x/1e3:.1f}K'
             return f'${x:.0f}'
         
-        ax2.yaxis.set_major_formatter(plt.FuncFormatter(format_value))
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(format_value))
         
         for bar in bars:
             height = bar.get_height()
-            ax2.text(bar.get_x() + bar.get_width()/2., height,
+            ax.text(bar.get_x() + bar.get_width()/2., height,
                     format_value(height, None),
                     ha='center', va='bottom',
                     fontsize=8, fontweight='bold')
         
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
-        canvas2 = FigureCanvasTkAgg(fig2, master=top_right)
-        canvas2.draw()
-        canvas2.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
-        
-        # Price Distribution (Histogram)
-        fig3, ax3 = plt.subplots(figsize=(6, 4), dpi=100)
+        plt.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+
+    def create_price_distribution_chart(self, parent, colors):
+        fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+        cursor = self.conn.cursor()
         cursor.execute("SELECT price FROM product")
         prices = [x[0] for x in cursor.fetchall()]
         
         n_bins = min(8, len(set(prices)))
-        n, bins, patches = ax3.hist(prices, bins=n_bins, edgecolor='white')
+        n, bins, patches = ax.hist(prices, bins=n_bins, edgecolor='white')
         
         for i, patch in enumerate(patches):
-            patch.set_facecolor(hist_colors[i % len(hist_colors)])
+            patch.set_facecolor(colors[i % len(colors)])
         
-        ax3.set_xlabel('Price ($)', fontsize=10, labelpad=10)
-        ax3.set_ylabel('Count', fontsize=10, labelpad=10)
+        ax.set_xlabel('Price ($)', fontsize=10, labelpad=10)
+        ax.set_ylabel('Count', fontsize=10, labelpad=10)
         
         if max(prices) > 1000:
-            ax3.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x/1000:.1f}K' if x >= 1000 else f'${x:.0f}'))
+            ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x/1000:.1f}K' if x >= 1000 else f'${x:.0f}'))
         
         plt.tight_layout()
-        canvas3 = FigureCanvasTkAgg(fig3, master=bottom_left)
-        canvas3.draw()
-        canvas3.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
-        
-        # Top Products by Value (Horizontal Bar Chart)
-        fig4, ax4 = plt.subplots(figsize=(8.5, 5), dpi=100)
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+
+    def create_top_products_chart(self, parent, colors):
+        fig, ax = plt.subplots(figsize=(8.5, 5), dpi=100)
+        cursor = self.conn.cursor()
         cursor.execute("""
             SELECT name, price * quantity as total_value 
             FROM product 
@@ -1064,26 +1145,174 @@ class StockManager:
         products = [x[0] for x in value_data]
         values = [x[1] for x in value_data]
         
-        bars = ax4.barh(products, values, color=top_products_colors[:len(products)])
+        bars = ax.barh(products, values, color=colors[:len(products)])
         
-        ax4.set_xlabel('Value ($)', fontsize=10, labelpad=10)
+        ax.set_xlabel('Value ($)', fontsize=10, labelpad=10)
         
-        ax4.xaxis.set_major_formatter(plt.FuncFormatter(format_value))
+        def format_value(x, p):
+            if x >= 1e6:
+                return f'${x/1e6:.1f}M'
+            elif x >= 1e3:
+                return f'${x/1e3:.1f}K'
+            return f'${x:.0f}'
         
-        plt.setp(ax4.get_yticklabels(), fontsize=8)
-        ax4.set_ylim(-0.5, len(products) - 0.5)  # Add more space between bars
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(format_value))
+        
+        plt.setp(ax.get_yticklabels(), fontsize=8)
+        ax.set_ylim(-0.5, len(products) - 0.5)  # Add more space between bars
         
         for i, bar in enumerate(bars):
             width = bar.get_width()
-            ax4.text(width, i, format_value(width, None),
+            ax.text(width, i, format_value(width, None),
                     ha='left', va='center',
                     fontsize=8, fontweight='bold')
         
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.tight_layout()
         
-        canvas4 = FigureCanvasTkAgg(fig4, master=bottom_right)
-        canvas4.draw()
-        canvas4.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+
+    def create_quantity_distribution_chart(self, parent, colors):
+        fig, ax = plt.subplots(figsize=(12, 4), dpi=100)
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT quantity FROM product")
+        quantities = [x[0] for x in cursor.fetchall()]
+        
+        n_bins = min(10, len(set(quantities)))
+        n, bins, patches = ax.hist(quantities, bins=n_bins, edgecolor='white')
+        
+        for i, patch in enumerate(patches):
+            patch.set_facecolor(colors[i % len(colors)])
+        
+        ax.set_xlabel('Quantity', fontsize=10, labelpad=10)
+        ax.set_ylabel('Number of Products', fontsize=10, labelpad=10)
+        
+        plt.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+
+    def create_category_distribution_chart(self, parent, colors):
+        fig, ax = plt.subplots(figsize=(7, 4), dpi=100)
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT c.name, COUNT(p.id) as product_count
+            FROM category c
+            LEFT JOIN product p ON c.id = p.id_category
+            GROUP BY c.name
+            ORDER BY product_count DESC
+        """)
+        data = cursor.fetchall()
+        
+        categories = [x[0] for x in data]
+        counts = [x[1] for x in data]
+        
+        bars = ax.bar(categories, counts, color=colors[:len(categories)])
+        ax.set_xlabel('Category', fontsize=10, labelpad=10)
+        ax.set_ylabel('Number of Products', fontsize=10, labelpad=10)
+        plt.setp(ax.get_xticklabels(), rotation=30, ha='right')
+        
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{int(height)}',
+                    ha='center', va='bottom',
+                    fontsize=8, fontweight='bold')
+        
+        plt.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+
+    def create_avg_price_chart(self, parent, colors):
+        fig, ax = plt.subplots(figsize=(7, 4), dpi=100)
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT c.name, AVG(p.price) as avg_price
+            FROM category c
+            LEFT JOIN product p ON c.id = p.id_category
+            GROUP BY c.name
+            ORDER BY avg_price DESC
+        """)
+        data = cursor.fetchall()
+        
+        categories = [x[0] for x in data]
+        avg_prices = [x[1] if x[1] is not None else 0 for x in data]
+        
+        bars = ax.bar(categories, avg_prices, color=colors[:len(categories)])
+        ax.set_xlabel('Category', fontsize=10, labelpad=10)
+        ax.set_ylabel('Average Price ($)', fontsize=10, labelpad=10)
+        plt.setp(ax.get_xticklabels(), rotation=30, ha='right')
+        
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                    f'${int(height)}',
+                    ha='center', va='bottom',
+                    fontsize=8, fontweight='bold')
+        
+        plt.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+
+    def create_low_stock_chart(self, parent, colors):
+        fig, ax = plt.subplots(figsize=(7, 4), dpi=100)
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT name, quantity
+            FROM product
+            WHERE quantity < 10
+            ORDER BY quantity
+        """)
+        data = cursor.fetchall()
+        
+        products = [x[0] for x in data]
+        quantities = [x[1] for x in data]
+        
+        if not products:
+            ax.text(0.5, 0.5, 'No products with low stock',
+                    ha='center', va='center',
+                    fontsize=12, color='gray')
+        else:
+            bars = ax.barh(products, quantities, color=colors[0])
+            ax.set_xlabel('Quantity', fontsize=10, labelpad=10)
+            plt.setp(ax.get_yticklabels(), fontsize=8)
+            
+            for i, bar in enumerate(bars):
+                width = bar.get_width()
+                ax.text(width, i, str(int(width)),
+                        ha='left', va='center',
+                        fontsize=8, fontweight='bold')
+        
+        plt.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+
+    def create_value_distribution_chart(self, parent, colors):
+        fig, ax = plt.subplots(figsize=(7, 4), dpi=100)
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT price * quantity as value FROM product")
+        values = [x[0] for x in cursor.fetchall()]
+        
+        n_bins = min(8, len(set(values)))
+        n, bins, patches = ax.hist(values, bins=n_bins, edgecolor='white')
+        
+        for i, patch in enumerate(patches):
+            patch.set_facecolor(colors[i % len(colors)])
+        
+        ax.set_xlabel('Total Value ($)', fontsize=10, labelpad=10)
+        ax.set_ylabel('Number of Products', fontsize=10, labelpad=10)
+        
+        if max(values) > 1000:
+            ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x/1000:.1f}K' if x >= 1000 else f'${x:.0f}'))
+        
+        plt.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
 
     def filter_products(self, *args):
         search_term = self.search_var.get().lower()
