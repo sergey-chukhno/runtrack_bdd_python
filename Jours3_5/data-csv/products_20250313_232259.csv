@@ -1,0 +1,15 @@
+ID,Name,Description,Price,Quantity,Category
+1,Laptop,High-performance laptop,999,10,Electronics
+5,Washing Machine,Whirlpool new washing machine,200,12,Electronics
+6,Iphone,Iphone16,1074,8,Electronics
+13,TV set,Samsung TLE180,399,3,Electronics
+2,T-shirt,Cotton t-shirt,20,100,Clothing
+3,Chocolate,Dark chocolate bar,5,200,Food
+9,Cookies,Oreo,1,100,Food
+10,Milk,Lactel,2,466,Food
+4,Python Book,Programming guide,45,50,Books
+7,Shampoo,Head&Shoulders,2,510,Cosmetics and Hygiene
+11,Shower gel,Le Petit Marseiillais,2,178,Cosmetics and Hygiene
+12,Soap,Savon de Marseille,5,123,Cosmetics and Hygiene
+8,Guitar,Melodia-X2,240,22,Music Instruments
+14,Doliprane,Doliprane 250mg,4,78,Pharmaceuticals
